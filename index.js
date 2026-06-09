@@ -4,43 +4,54 @@ const admin = require('firebase-admin');
 
 const app = express();
 
-// 1. CORS কনফিগারেশন (সবচেয়ে শক্তিশালী সেটিংস)
-app.use(cors({
-    origin: '*', // সব ডোমেইন থেকে রিকোয়েস্ট অ্যালাউ করবে
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-    credentials: true
-}));
-
-// Preflight রিকোয়েস্ট হ্যান্ডলিং
-app.options('*', cors());
+// ১. CORS এর জন্য কড়া সিকিউরিটি হেডার
+app.use((req, res, next) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    if (req.method === 'OPTIONS') {
+        return res.status(200).end();
+    }
+    next();
+});
 
 app.use(express.json());
 
-// 2. Firebase Admin Setup
+// ২. Firebase Admin Init (নিরাপদ উপায়)
 if (!admin.apps.length) {
-    admin.initializeApp({
-        credential: admin.credential.cert({
-            projectId: process.env.FIREBASE_PROJECT_ID,
-            clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-            privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-        })
-    });
+    try {
+        const privateKey = process.env.FIREBASE_PRIVATE_KEY 
+            ? process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n') 
+            : '';
+
+        admin.initializeApp({
+            credential: admin.credential.cert({
+                projectId: process.env.FIREBASE_PROJECT_ID,
+                clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+                privateKey: privateKey
+            })
+        });
+        console.log("Firebase initialized.");
+    } catch (err) {
+        console.error("Firebase Init Error:", err);
+    }
 }
 
-// 3. Password Update API Route
+// ৩. মেইন API
 app.post('/api/update-password', async (req, res) => {
-    const { uid, newPassword } = req.body;
-    
-    if (!uid || !newPassword) {
-        return res.status(400).json({ error: "Missing uid or password" });
-    }
-
     try {
+        const { uid, newPassword } = req.body;
+        
+        if (!uid || !newPassword) {
+            return res.status(400).json({ error: "Missing uid/password" });
+        }
+
+        // Firebase Auth আপডেট
         await admin.auth().updateUser(uid, { password: newPassword });
-        return res.status(200).json({ success: true, message: "Password forcefully updated!" });
+        return res.status(200).json({ success: true });
+        
     } catch (error) {
-        console.error("Firebase Error:", error);
+        // এখানে এরর হলে আমরা পরিষ্কার এরর মেসেজ পাঠাচ্ছি, সার্ভার ক্র্যাশ করবে না
         return res.status(500).json({ success: false, error: error.message });
     }
 });
