@@ -4,20 +4,18 @@ const admin = require('firebase-admin');
 
 const app = express();
 
-// ১. CORS এর জন্য কড়া সিকিউরিটি হেডার
-app.use((req, res, next) => {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-    if (req.method === 'OPTIONS') {
-        return res.status(200).end();
-    }
-    next();
-});
+// CORS কনফিগারেশন - সব ধরনের রিকোয়েস্ট অ্যালাউ করে
+app.use(cors({
+    origin: '*',
+    methods: ['GET', 'POST', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+}));
 
+// Preflight রিকোয়েস্ট হ্যান্ডলিং
+app.options('*', cors());
 app.use(express.json());
 
-// ২. Firebase Admin Init (নিরাপদ উপায়)
+// Firebase Admin Setup
 if (!admin.apps.length) {
     try {
         const privateKey = process.env.FIREBASE_PRIVATE_KEY 
@@ -31,27 +29,26 @@ if (!admin.apps.length) {
                 privateKey: privateKey
             })
         });
-        console.log("Firebase initialized.");
+        console.log("Firebase initialized successfully.");
     } catch (err) {
         console.error("Firebase Init Error:", err);
     }
 }
 
-// ৩. মেইন API
+// Password Update API Route
 app.post('/api/update-password', async (req, res) => {
     try {
         const { uid, newPassword } = req.body;
         
         if (!uid || !newPassword) {
-            return res.status(400).json({ error: "Missing uid/password" });
+            return res.status(400).json({ error: "Missing uid or password in request body" });
         }
 
-        // Firebase Auth আপডেট
         await admin.auth().updateUser(uid, { password: newPassword });
-        return res.status(200).json({ success: true });
+        return res.status(200).json({ success: true, message: "Password forcefully updated!" });
         
     } catch (error) {
-        // এখানে এরর হলে আমরা পরিষ্কার এরর মেসেজ পাঠাচ্ছি, সার্ভার ক্র্যাশ করবে না
+        console.error("Firebase Update Error:", error.message);
         return res.status(500).json({ success: false, error: error.message });
     }
 });
